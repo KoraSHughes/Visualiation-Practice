@@ -170,44 +170,217 @@ function draw_histogram(wrapper, data)
 
 function draw_hbar(wrapper, data)
 {
-  data = data["data"]
-  data = data.sort(d3.ascending);
+  let svg = add_svg(wrapper);
+  let data = data['data']
 
-  let svg  = add_svg(wrapper);  
-  let min = d3.min(data);
-  let max  = d3.max(data);    
+  const width = 1000
+  const height = 1000
+  const margin = {top: 50, bottom: 10, left: 150, right: 20, title: 60}
+  const visWidth = width - margin.left - margin.right
+  const visHeight = 800 - margin.top - margin.bottom
 
-  let scalex = d3.scaleLinear().domain([min, max]).range([0, svg.attr("width")]);  
-  let x_axis = d3.axisBottom().scale(scalex);  
-
-  svg.append('g')
-    .attr("class", "x_axis")
-    .attr("transform", "translate(30, " + (svg.attr("height") - 20) + ")")
-    .call(x_axis);       
-
-  let histogram = d3.histogram()
-      .domain(scalex.domain()) 
-      .thresholds(10);
-
-  let bins = histogram(data);
+  const valExtent = d3.extent(data, d => Math.abs(d.influence))
+  const attributeScale = d3.scaleBand().domain(data.map(d => d.name)).range([0, visHeight]).padding(0.5)
+  const valScale = d3.scaleLinear().domain(valExtent).range([0, visWidth])
+  const yAxis = d3.axisLeft(attributeScale)
+  const myfont = {type: "Times New Roman", small: 14, med: 20, large: 30};
+  const bar_color = ['blue', 'orange']
+  const bar_text = ['white', 'black']
   
-  let scaley = d3.scaleLinear()
-    .domain([0, d3.max(bins, function (d) { return d.length; })])
-    .range([svg.attr("height") - 22, 3]);
-  let y_axis = d3.axisLeft().scale(scaley);  
+  // const svg = d3.create('svg')
+  //     .attr('width', visWidth + margin.left + margin.right)
+  //     .attr('height', visHeight + margin.top + margin.bottom);
+  
+  // append a group element and move it left and down to create space
+  // for the left and top margins
+  const g = svg.append("g")
+      .attr('transform', `translate(${margin.left}, ${margin.top})`);
+  
+  // bind our data to rectangles
+  g.selectAll('rect')
+    .data(data)
+    .join('rect')
+      // set attributes for each bar
+      .attr('x', function(d){ if(d.class === 1){return 5+visWidth/2;} else{return 5+(visWidth/2) - (valScale(Math.abs(d.influence)));} })
+      .attr('y', d => attributeScale(d.name))
+      .attr('width', d => valScale(Math.abs(d.influence)))
+      .attr('height', attributeScale.bandwidth())
+      .attr('fill', d => bar_color[d.class]);
 
-  svg.append('g')
-    .attr("class", "y_axis")
-    .attr("transform", "translate(30, 0)")
-    .call(y_axis);
+  //titles
+  svg.append('text')
+			.attr('fill', bar_color[0])
+			.attr('x', visWidth/2 - margin.title)
+			.attr('y', 40)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.large)
+			.text("Class 0: <=50k");
+  svg.append('text')
+			.attr('fill', bar_color[1])
+			.attr('x', 230+visWidth/2 - margin.title)
+			.attr('y', 40)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.large)
+			.text("Class 1: >50k");
 
-  svg.selectAll("rect")
-      .data(bins)
-      .enter()
-      .append("rect")
-        .attr("x", 32)
-        .attr("transform", function(d) { return "translate(" + scalex(d.x0) + "," + scaley(d.length) + ")"; })
-        .attr("width", function(d) { return scalex(d.x1) - scalex(d.x0) -1 ; })
-        .attr("height", function(d) { return (svg.attr("height") - 20) - scaley(d.length); })
-        .attr("class", "hist-rect")
+  const barinfo = g.append("g")
+		  .selectAll("g")
+		  .data(data)
+		  .join("g")
+		  .attr("transform", (d, i) => `translate(410, ${85 + i*108})`);
+  barinfo.append("text")  // values
+		  .attr('fill', d => bar_color[d.class])
+			.attr('x', d => -5 - 20*Math.sign(d.influence))
+			.attr('y', 0)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.small)
+			.text(d => d.influence);
+    barinfo.append("text")   //names
+		  .attr('fill', 'black')
+			.attr('x', d => -80 + 80*Math.sign(d.influence))
+			.attr('y', (d, i) => -50 + 3*i)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.med)
+			.text(d => d.name);
+  
+    // table to the right
+    barinfo.append("rect")
+		  .attr('fill', d => bar_color[d.class])
+      .attr('width', 250)
+      .attr('height', 25)
+			.attr('x', 190)
+			.attr('y', (d, i) => 132 - 80*i);	
+    barinfo.append("text")   //names
+		  .attr('fill', d => bar_text[d.class])
+			.attr('x', 200)
+			.attr('y', (d, i) => 150 - 80*i)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.small)
+			.text(d => d.name + ":");
+    barinfo.append("text")   //values
+		  .attr('fill', d => bar_text[d.class])
+			.attr('x', 400)
+			.attr('y', (d, i) => 150 - 80*i)
+			.attr("font-family", myfont.type)
+			.attr("font-size", myfont.small)
+			.text(d => d.value);
+  
+  return svg.node();
+}
+
+function draw_dep(wrapper, data)
+{
+  let svg = add_svg(wrapper)
+  let data = data['data']
+    // set up
+  const margin = {top: 50, right: 120, bottom: 50, left: 120};
+  const visWidth = 400;
+  const visHeight = 400;
+
+  const colorExt = d3.extent(data2, d => d.color)
+  const colorScale = d3.scaleDivergingSqrt().domain(colorExt).interpolator(d3.interpolateTurbo)
+
+  const svg = d3.create('svg')
+      .attr('width', visWidth + margin.left + margin.right)
+      .attr('height', visHeight + margin.top + margin.bottom);
+
+  const g = svg.append("g")
+      .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+  // add title  
+  g.append("text")
+    .attr("x", visWidth / 2)
+    .attr("y", -margin.top + 5)
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "hanging")
+    .attr("font-family", "sans-serif")
+    .attr("font-size", "16px")
+    .text("Dependency Graph");
+
+  // create scales
+
+  const x = d3.scaleLinear()
+      .domain(d3.extent(data2, d => d.x)).nice()
+      .range([0, visWidth]);
+
+  const y = d3.scaleLinear()
+      .domain(d3.extent(data2, d => d.y)).nice()
+      .range([visHeight, 0]);
+
+  // create and add axes
+
+  const xAxis = d3.axisBottom(x);
+
+  g.append("g")
+      // move to bottom of chart
+      .attr("transform", `translate(0, ${visHeight})`)
+      // add axis
+      .call(xAxis)
+      // remove baseline from axis
+      .call(g => g.select(".domain").remove())
+      // add grid lines
+      // refernces https://observablehq.com/@d3/connected-scatterplot
+      .call(g => g.selectAll('.tick line')
+        .clone()
+          .attr('stroke', '#d3d3d3')
+          .attr('y1', -visHeight)
+          .attr('y2', 0))
+    // add title
+    .append("text")
+      .attr("x", visWidth / 2)
+      .attr("y", 40)
+      .attr("fill", "black")
+      .attr("text-anchor", "middle")
+      .text("XAXIS");
+
+  const yAxis = d3.axisLeft(y);
+
+  g.append("g")
+      // add axis
+      .call(yAxis)
+      // remove baseline from axis
+      .call(g => g.select(".domain").remove())
+      // add grid lines
+      // refernces https://observablehq.com/@d3/connected-scatterplot
+      .call(g => g.selectAll('.tick line')
+        .clone()
+          .attr('stroke', '#d3d3d3')
+          .attr('x1', 0)
+          .attr('x2', visWidth))
+    // add title
+    .append("text")
+      .attr("x", -40)
+      .attr("y", visHeight / 2)
+      .attr("fill", "black")
+      .attr("dominant-baseline", "middle")
+      .text("YAXIS");
+
+  // draw points
+
+  g.append("g")
+    .selectAll("circle")
+    .data(data2)
+    .join("circle")
+      .attr("cx", d => x(d.x))
+      .attr("cy", d => y(d.y))
+      .attr("fill", d => colorScale(d.color))
+      .attr("r", 3);
+
+  const colorlegend = g.append("g")
+    .selectAll("g")
+    .data(colorExt)
+    .join("g")
+      .attr("transform", (d, i) => `translate(650, ${360 + i*15*2.8})`);
+  
+  colorlegend.append("circle")
+    .attr("r", 15)
+    .attr("fill", d => colorScale(d));
+
+  colorlegend.append("text")
+    .attr("dominant-baseline", "right")
+    .attr("x", 20)
+    .attr("y", 5)
+    .text(d => d + "%");
+
+  return svg.node();
 }
